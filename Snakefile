@@ -8,7 +8,7 @@ import pypdb
 pdb_csv=pd.read_csv("pdbs.csv")
 
 
-pdb_list = []
+pdb_redo = []
 for i in pdb_csv['pdb'].str.lower().to_list():
     try:
         ur.urlopen(f"https://pdb-redo.eu/db/{i}/{i}_final.pdb")
@@ -19,7 +19,7 @@ for i in pdb_csv['pdb'].str.lower().to_list():
 
 rule all:
     input:
-        pdb_list,
+        pdb_redo,
         expand("{pdb}/{pdb}_original.pdb", pdb=pdb_csv['pdb'].str.upper()),
         "pdbs_method.csv"
 

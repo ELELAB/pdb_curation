@@ -14,7 +14,7 @@ for i in pdb_csv['pdb'].str.lower().to_list():
         ur.urlopen(f"https://pdb-redo.eu/db/{i}/{i}_final.pdb")
     except HTTPError:
         continue
-    pdb_list.append(i.upper()+"/"+i.upper()+"_pdbredo.pdb")
+    pdb_redo.append(i.upper()+"/"+i.upper()+"_pdbredo.pdb")
 
 
 rule all:

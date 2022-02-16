@@ -15,18 +15,18 @@ ways.
 
 The pipeline uses the following Python packages:
 
-- pandae
+- pandas
 - pypdb
 
 ### Input structure
 
 The sole input for this pipeline is a `pdbs.csv` file that should be located
-in the same directory as the Snakefile (see example). It includes the following
-comma-separated columns:
+in the same directory as the Snakefile (see example included in the repository). 
+This file should contain the following comma-separated columns:
 
 |Column name|Expected content|Example|
------------------------------------
-pdbs|four-letter PDB ID code. Can be upper or lowercase|1AQH|
+|------------|----------------|-------|
+|pdbs|four-letter PDB ID code. Can be upper or lowercase|1AQH|
 ...
 
 ## Output structure

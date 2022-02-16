@@ -23,7 +23,6 @@ import pypdb
 
 pdb_csv=pd.read_csv("pdbs.csv")
 
-
 pdb_redo = []
 for i in pdb_csv['pdb'].str.lower().to_list():
     try:
@@ -59,6 +58,6 @@ rule method_table:
     output:
         "pdbs_method.csv"
     run:
-        pdb_csv=pd.read_csv(f"{input}")
+        pdb_csv=pd.read_csv(input[0])
         pdb_csv['method'] = pdb_csv.apply(lambda x: get_all_info(x['pdb'])['exptl'][0]['method'], axis=1)       
-        pdb_csv.to_csv(f"{output}")
+        pdb_csv.to_csv(output[0])

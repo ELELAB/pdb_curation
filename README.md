@@ -27,7 +27,7 @@ This file should contain the following comma-separated columns:
 |Column name|Expected content|Example|
 |------------|----------------|-------|
 |pdbs|four-letter PDB ID code. Can be upper or lowercase|1AQH|
-|type|denotes if the protein is part of a protein complex (complex) or not (free)|free|
+|type|denotes if the PDB file contains a protein heterocomplex (complex) or not (free)|free|
 
 ## Output structure
 
@@ -58,6 +58,6 @@ as the input file and more, namely:
 |Column name|Expected content|Example|
 |------------|----------------|-------|
 |pdb|four-letter PDB ID code. Can be upper or lowercase|1AQH|
-|type|denotes if the protein is part of a protein complex (complex) or not (free)|free|
+|type|denotes if the PDB file contains a protein heterocomplex (complex) or not (free)|free|
 |method|denotes the experimental method used to obtain the structure|X-ray diffraction|
 

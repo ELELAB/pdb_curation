@@ -17,6 +17,7 @@ The pipeline uses the following Python packages:
 
 - pandas
 - pypdb
+- urllib
 
 ### Input structure
 
@@ -45,7 +46,9 @@ protein:
 └── 1AQH_pdbredo.pdb
 ```
 
-- `1AQH/1AQH_original.pdb` is ..
+- `1AQH/1AQH_original.pdb` is the path containing the unprocessed pdb file
+   downloaded from PDB database (https://www.rcsb.org/structure/1AQH). 
 
-- `1AQH/1AQH_pdbredo.pdb` is ..
+- `1AQH/1AQH_pdbredo.pdb` is the path containing the pdb file optimized through
+   the PDB-REDO procedure (https://pdb-redo.eu/db/1aqh/1aqh_final.pdb).
 

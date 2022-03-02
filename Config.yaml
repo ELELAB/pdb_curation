@@ -1,0 +1,5 @@
+pdb2fasta_bin:
+        /usr/local/bin/pdb2fasta
+clustlo_bin:
+        /usr/local/clustal-omega-1.2.4/bin/clustalo 
+

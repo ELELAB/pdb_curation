@@ -1,6 +1,7 @@
 # pdb_curation
 
 Cancer Structural Biology, Danish Cancer Society Research Center, 2100, Copenhagen, Denmark
+
 Cancer Systems Biology, Health and Technology Department, Section for Bioinformatics, 2800, Lyngby, Denmark
 
 ## Introduction

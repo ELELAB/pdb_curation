@@ -6,6 +6,7 @@ from urllib.error import HTTPError
 from pypdb import get_all_info
 import pypdb
 import os
+from Bio.PDB import PDBParser
 #bash_command= "source /usr/local/amber-20/amber.sh"
 #os.system(bash_command)
 
@@ -56,6 +57,7 @@ def uniprot_chain(pdb_entry):
         return final_correspondence
 
 ### to insert in uniprot_sequences rule ###
+###
 def pdb_chain_name(input,pdb):
     from Bio.PDB import PDBParser
     x=str(pdb)
@@ -70,23 +72,18 @@ def pdb_chain_name(input,pdb):
     return u.values()
 ###
 
-pdb_list = []
-for i in pdb_csv['pdb'].str.lower().to_list():
-    try:
-        ur.urlopen(f"https://pdb-redo.eu/db/{i}/{i}_final.pdb")
-    except HTTPError:
-        continue
-    pdb_list.append(i.upper()+"/"+i.upper()+"_pdbredo.pdb")
+
 ###
 
 #### list to use along with the wildcards in pdb_split_chain rule to assign each list entry to the pdb_redo file #### 
-
+pdb_list = []
 ID_entry_redo=[]
 for i in pdb_csv['pdb'].str.lower().to_list():
     try:
         ur.urlopen(f"https://pdb-redo.eu/db/{i}/{i}_final.pdb")
     except HTTPError:
         continue
+    pdb_list.append(i.upper()+"/"+i.upper()+"_pdbredo.pdb")
     ID_entry_redo.append(i.upper())
 
 ###
@@ -139,19 +136,17 @@ rule uniprot_sequence:
         directory("{pdb}/uniprot_sequences/")
     run:
         shell("mkdir -p {wildcards.pdb}/uniprot_sequences/")
-        x=list(uniprot_chain(wildcards.pdb).values())
-        from Bio.PDB import PDBParser
-        with open(f"{input}") as pdb:
-            pdb_file=PDBParser().get_structure(wildcards.pdb, pdb)
-            l=[]
-            for chainn in pdb_file.get_chains():
-                i=str(chainn)
-                l.append(i[10])
-            i=list(uniprot_chain(wildcards.pdb))
-            d=dict(zip(i,l))
-            y=list(d.values())
-            for i in range(len(x)):
-                ur.urlretrieve(f'https://www.uniprot.org/uniprot/{x[i]}.fasta', f'{wildcards.pdb}/uniprot_sequences/{wildcards.pdb}_{y[i]}.fasta')
+        uniprot_ID=list(uniprot_chain(wildcards.pdb).values())
+        #with open(f"{input}") as pdb:
+        pdb_file=PDBParser().get_structure(wildcards.pdb, f"{input}")
+        chain_list=[]
+        for chain in pdb_file.get_chains():
+            chain_list.append(chain.get_id())
+        chain_unip=list(uniprot_chain(wildcards.pdb))
+        d=dict(zip(chain_unip,chain_list))
+        y=list(d.values())
+        for i in range(len(uniprot_ID)):
+            ur.urlretrieve(f'https://www.uniprot.org/uniprot/{uniprot_ID[i]}.fasta', f'{wildcards.pdb}/uniprot_sequences/{wildcards.pdb}_{y[i]}.fasta')
 
 rule split_chain_2fasta:
     input:

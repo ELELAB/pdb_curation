@@ -57,7 +57,10 @@ def uniprot_chain(pdb_entry):
         return final_correspondence
 
 ### to insert in uniprot_sequences rule ###
-###
+
+
+"""
+
 def pdb_chain_name(input,pdb):
     from Bio.PDB import PDBParser
     x=str(pdb)
@@ -70,10 +73,8 @@ def pdb_chain_name(input,pdb):
         i=list(uniprot_chain(wildcards.pdb))
         u=dict(zip(i,l))
     return u.values()
-###
 
-
-###
+"""
 
 #### list to use along with the wildcards in pdb_split_chain rule to assign each list entry to the pdb_redo file #### 
 pdb_list = []
@@ -85,8 +86,6 @@ for i in pdb_csv['pdb'].str.lower().to_list():
         continue
     pdb_list.append(i.upper()+"/"+i.upper()+"_pdbredo.pdb")
     ID_entry_redo.append(i.upper())
-
-###
 
 ### pdb_method table obtaining ###
 
@@ -133,7 +132,6 @@ rule uniprot_sequence:
     run:
         shell("mkdir -p {wildcards.pdb}/uniprot_sequences/")
         uniprot_ID=list(uniprot_chain(wildcards.pdb).values())
-        #with open(f"{input}") as pdb:
         pdb_file=PDBParser().get_structure(wildcards.pdb, input[0])
         chain_list=[]
         for chain in pdb_file.get_chains():

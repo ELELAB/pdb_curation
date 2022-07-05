@@ -92,15 +92,11 @@ for i in pdb_csv['pdb'].str.lower().to_list():
 
 pdb_csv['method'] = pdb_csv.apply(lambda x: get_all_info(x['pdb'])['exptl'][0]['method'], axis=1)
 pdb_csv.to_csv("pdb_method")
-dictionary:{}
 list_chain_ID=[]
 for i in pdb_csv['pdb'].to_list():
     dictionary=uniprot_chain(i)
-    a=str(dictionary)
-    b=a.replace('{', '')
-    c=b.replace('}', '')
-    string=c.replace("'", '')
-    list_chain_ID.append(string)
+    ID=", ".join(f"{k} {v}" for k,v in dictionary.items())
+    list_chain_ID.append(ID)    
 
 pdb_csv["chain_uniprot_ID"]=list_chain_ID
 pdb_csv.to_csv("pdb_method")
@@ -138,7 +134,7 @@ rule uniprot_sequence:
         shell("mkdir -p {wildcards.pdb}/uniprot_sequences/")
         uniprot_ID=list(uniprot_chain(wildcards.pdb).values())
         #with open(f"{input}") as pdb:
-        pdb_file=PDBParser().get_structure(wildcards.pdb, f"{input}")
+        pdb_file=PDBParser().get_structure(wildcards.pdb, input[0])
         chain_list=[]
         for chain in pdb_file.get_chains():
             chain_list.append(chain.get_id())

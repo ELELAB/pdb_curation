@@ -7,8 +7,7 @@ from pypdb import get_all_info
 import pypdb
 import os
 from Bio.PDB import PDBParser
-#bash_command= "source /usr/local/amber-20/amber.sh"
-#os.system(bash_command)
+from Bio.PDB import PDBIO
 
 pdb_csv=pd.read_csv("pdbs.csv")
 
@@ -39,7 +38,7 @@ def uniprot_chain(pdb_entry):
 
         polymer_entity_instances {{
           rcsb_polymer_entity_instance_container_identifiers {{
-            asym_id
+            auth_asym_id
             }}
           }}
         }}
@@ -51,32 +50,14 @@ def uniprot_chain(pdb_entry):
     entry = json.loads(response.text)
     for entity in entry['data']['entry']['polymer_entities']:
         if entity['entity_poly']['rcsb_entity_polymer_type'] == 'Protein':
-            for instance in entity['polymer_entity_instances']:
-                final_correspondence[instance['rcsb_polymer_entity_instance_container_identifiers']['asym_id']] = entity['rcsb_polymer_entity_container_identifiers']['reference_sequence_identifiers'][0]['database_accession']
-    for i in final_correspondence:
-        return final_correspondence
+            uniprot=[]
+            for i in entity['rcsb_polymer_entity_container_identifiers']['reference_sequence_identifiers']:
+                uniprot.append(i['database_accession'])
+                for instance in entity['polymer_entity_instances']:
+                    final_correspondence[instance['rcsb_polymer_entity_instance_container_identifiers']['auth_asym_id']] = uniprot
+    return final_correspondence
 
-### to insert in uniprot_sequences rule ###
-
-
-"""
-
-def pdb_chain_name(input,pdb):
-    from Bio.PDB import PDBParser
-    x=str(pdb)
-    with open(input) as pdb:
-        pdb_file=PDBParser().get_structure(x, input)
-        l=[]
-        for chainn in pdb_file.get_chains():
-            i=str(chainn)
-            l.append(i[10])
-        i=list(uniprot_chain(wildcards.pdb))
-        u=dict(zip(i,l))
-    return u.values()
-
-"""
-
-#### list to use along with the wildcards in pdb_split_chain rule to assign each list entry to the pdb_redo file #### 
+#### list of pdb for which the pdb_redo is available #### 
 pdb_list = []
 ID_entry_redo=[]
 for i in pdb_csv['pdb'].str.lower().to_list():
@@ -87,29 +68,76 @@ for i in pdb_csv['pdb'].str.lower().to_list():
     pdb_list.append(i.upper()+"/"+i.upper()+"_pdbredo.pdb")
     ID_entry_redo.append(i.upper())
 
-### pdb_method table obtaining ###
-
+##### pdb_method file #####
 pdb_csv['method'] = pdb_csv.apply(lambda x: get_all_info(x['pdb'])['exptl'][0]['method'], axis=1)
 pdb_csv.to_csv("pdb_method")
 list_chain_ID=[]
 for i in pdb_csv['pdb'].to_list():
-    dictionary=uniprot_chain(i)
-    ID=", ".join(f"{k} {v}" for k,v in dictionary.items())
-    list_chain_ID.append(ID)    
-
-pdb_csv["chain_uniprot_ID"]=list_chain_ID
+    dictionary=uniprot_chain(str(i))
+    ID_a=", ".join(f"{k} {v}" for k,v in dictionary.items())
+    list_chain_ID.append(ID_a)
+for i in list_chain_ID:
+    pdb_csv["chain_uniprot_ID"]=list_chain_ID
 pdb_csv.to_csv("pdb_method")
 
-#####
+###dataframes containing the chain ID for each pdb file along with the corresponding uniprot ID:
+df=pd.DataFrame()
+pdb_id=[]
+for entry in pdb_csv['pdb']:
+    uniprot_identifiers=uniprot_chain(entry)
+    for uniprot_id_list in uniprot_identifiers.values():
+        for uniprot_id in uniprot_id_list:
+            pdb_id.append(entry.upper())
+df['pdb']=pdb_id 
+chain_id_list=[]
+uniprot_id_final_list=[]
+for i in pdb_csv['pdb']:
+    uniprot_identifiers=uniprot_chain(i)
+    for chain_id,uniprot_id_list in uniprot_identifiers.items():
+       for i,g in zip(chain_id,uniprot_id_list):
+           for uniprot_id in uniprot_id_list:
+               chain_id_list.append(chain_id)
+               uniprot_id_final_list.append(uniprot_id)
+identifiers=list(zip(chain_id_list,uniprot_id_final_list))       
+df1 =pd.DataFrame(identifiers, columns= ['chain_id',"uniprot_id"])     
+df_final=pd.concat([df, df1], axis=1, join="inner")       
+
+### dataframe for uniprot_sequence rule:
+df_uniprot=df_final.drop_duplicates(subset=['uniprot_id']+['pdb'], keep="last")
+
+
+### dataframe for split_chain_original rule:
+df_split_chain=df_final.drop_duplicates(subset=['chain_id']+['pdb'], keep="last")
+
+###dataframes containing the chain ID for each pdb file for which the pdb redo is available along with the corresponding uniprot ID:
+
+pdb_list = []
+ID_entry_redo=[]
+for i in pdb_csv['pdb'].str.lower().to_list():
+    try:
+        ur.urlopen(f"https://pdb-redo.eu/db/{i}/{i}_final.pdb")
+    except HTTPError:
+        continue
+    pdb_list.append(i.upper()+"/"+i.upper()+"_pdbredo.pdb")
+    ID_entry_redo.append(i.upper())
+
+df_final_redo=df_final[df_final.pdb.isin(ID_entry_redo)]
+
+### dataframe for split_chain_redo rule:
+df_split_chain_redo=df_final_redo.drop_duplicates(subset=['chain_id']+['pdb'], keep="last")
+
+
+
 
 rule all:
     input:
-        pdb_list,
         expand("{pdb}/{pdb}_original.pdb", pdb=pdb_csv['pdb'].str.upper()),
-        expand("{pdb}/split_chain/", pdb=pdb_csv['pdb'].str.upper()),
-        expand("{pdb}/alignments/", pdb=pdb_csv['pdb'].str.upper()),
+        expand("{pdb_redo}/{pdb_redo}_redo.pdb", pdb_redo=ID_entry_redo),
+        expand("{pdb_align}/alignment/original/{pdb_align}_{chain_id}_{uniprot_seq}.clu", zip, pdb_align=df_split_chain['pdb'], chain_id=df_split_chain['chain_id'], uniprot_seq=df_split_chain['uniprot_id']),
+        expand("{pdb_align}/alignment/redo/{pdb_align}_{chain_id}_{uniprot_seq}.clu", zip, pdb_align=df_split_chain_redo['pdb'], chain_id=df_split_chain_redo['chain_id'], uniprot_seq=df_split_chain['uniprot_id']),
         expand("{pdb}/pdb4amber/original/{pdb}_amber_original.pdb", pdb=pdb_csv['pdb'].str.upper()),
-     #   expand("{pdb_redo}/pdb4amber/redo/{pdb_redo}_pdbredo.pdb", pdb_redo=ID_entry_redo),
+        expand("{pdb_redo}/pdb4amber/redo/{pdb_redo}_amber_redo.pdb",  pdb_redo=ID_entry_redo),
+
 
 rule download_pdb:
     output:
@@ -120,109 +148,91 @@ rule download_pdb:
 
 rule download_redo:
     output:
-        "{pdb}/{pdb_r}_pdbredo.pdb"
+        "{pdb_redo}/{pdb_redo}_redo.pdb"
     run:
-        ur.urlretrieve(f"https://pdb-redo.eu/db/{str.lower(wildcards.pdb)}/{str.lower(wildcards.pdb)}_final.pdb", output[0])
-                     
+        ur.urlretrieve(f"https://pdb-redo.eu/db/{str.lower(wildcards.pdb_redo)}/{str.lower(wildcards.pdb_redo)}_final.pdb", output[0])
+
+
+
 rule uniprot_sequence:
-    input:
-        "{pdb}/{pdb}_original.pdb"
     output:
-        directory("{pdb}/uniprot_sequences/")
+        "{pdb_uniprot}/uniprot_sequences/{uniprot_seq}.fasta"
     run:
-        shell("mkdir -p {wildcards.pdb}/uniprot_sequences/")
-        uniprot_ID=list(uniprot_chain(wildcards.pdb).values())
-        pdb_file=PDBParser().get_structure(wildcards.pdb, input[0])
-        chain_list=[]
-        for chain in pdb_file.get_chains():
-            chain_list.append(chain.get_id())
-        chain_unip=list(uniprot_chain(wildcards.pdb))
-        d=dict(zip(chain_unip,chain_list))
-        y=list(d.values())
-        for i in range(len(uniprot_ID)):
-            ur.urlretrieve(f'https://www.uniprot.org/uniprot/{uniprot_ID[i]}.fasta', f'{wildcards.pdb}/uniprot_sequences/{wildcards.pdb}_{y[i]}.fasta')
+        ur.urlretrieve(f'https://www.uniprot.org/uniprot/{wildcards.uniprot_seq}.fasta', output[0])
 
-rule split_chain_2fasta:
+rule split_chain_original:
     input:
-        "{pdb}/{pdb}_original.pdb",
-        expand("{pdb_redo}/{pdb_redo}_pdbredo.pdb", pdb_redo=ID_entry_redo)
+       "{pdb_split}/{pdb_split}_original.pdb",
     output:
-        directory("{pdb}/split_chain")
-    shell:
-        """
-        cd {wildcards.pdb}
-        mkdir split_chain
-        cd split_chain
-        for filename in ../*.pdb; do
-            pdb_splitchain $filename
-        done
-        mkdir original
-        if [[ $filename == *"pdbredo"* ]]; then
-                 mkdir redo
-        fi
-        for filename in *.pdb; do
-            if [[ $filename == *"pdbredo"* ]]; then
-                 sed -i -e '/TER/Q' $filename
-                 {config[pdb2fasta_bin]} $filename > redo/$(basename -- "$filename" .pdb).fasta
-                 mv $filename redo
-            fi
-            if [[ $filename == *"original"* ]]; then
-                 sed -i -e '/TER/Q' $filename
-                 {config[pdb2fasta_bin]} $filename > original/$(basename -- "$filename" .pdb).fasta
-                 mv $filename original
-            fi
-        done
-        """ 
+       "{pdb_split}/split_chain/original/{pdb_spli}_{chain_id}_{uniprot_seq}.pdb"
+    run:
+       structure=PDBParser().get_structure('protein', input[0])
+       io=PDBIO()
+       for i in structure.get_chains():
+           io.set_structure(i)
+           io.save(output[0])
 
-rule alignment:
+rule split_chain_redo:
     input:
-        expand("{pdb}/uniprot_sequences/", pdb=pdb_csv['pdb'].str.upper()),
-        expand("{pdb}/split_chain/", pdb=pdb_csv['pdb'].str.upper()),
+       "{pdb_split}/{pdb_split}_redo.pdb",
     output:
-        directory("{pdb}/alignments"),
-    shell:
+       "{pdb_split}/split_chain/redo/{pdb_split}_{chain_id}_{uniprot_seq}.pdb"
+    run:
+       structure=PDBParser().get_structure('protein', input[0])
+       io=PDBIO()
+       for i in structure.get_chains():
+           io.set_structure(i)
+           io.save(output[0])
+
+
+rule pdb2fasta_original:
+     input:
+        "{pdb_split}/split_chain/original/{pdb_spli}_{chain_id}_{uniprot_seq}.pdb"
+     output:
+        "{pdb_split}/split_chain/original/{pdb_spli}_{chain_id}_{uniprot_seq}.fasta"
+     shell:
         """
-        mkdir -p {wildcards.pdb}/alignments/original
-        declare -a array=()
-        for i in {wildcards.pdb}/uniprot_sequences/*.fasta
-        do
-            n=${{i%.*}}
-            n=${{n##*_}}
-            array+=("$n")
-        done
-        for i in "${{array[@]}}"
-        do
-            if  [[ 'grep -q '$i' ${wildcards.pdb}/uniprot_sequences/*.fasta' ]]; then
-                cat {wildcards.pdb}/uniprot_sequences/*_$i.fasta {wildcards.pdb}/split_chain/original/*_$i.fasta > {wildcards.pdb}/alignments/original/input_$i.fasta
-            fi
-        done 
-        for i in {wildcards.pdb}/alignments/original/*.fasta
-        do
-            n=${{i%.*}}
-            n=${{n##*_}}
-            {config[clustlo_bin]} -i $i -o {wildcards.pdb}/alignments/original/alignment_original_$n.clu --outfmt=clustal --resno
-        done
-        if [[ -d {wildcards.pdb}/split_chain/redo ]]; then
-             mkdir -p {wildcards.pdb}/alignments/redo
-            for i in "${{array[@]}}"
-            do
-            if  [[ 'grep -q '$i' ${wildcards.pdb}/uniprot_sequences/*.fasta' ]]; then
-                cat {wildcards.pdb}/uniprot_sequences/*_$i.fasta {wildcards.pdb}/split_chain/redo/*_$i.fasta > {wildcards.pdb}/alignments/redo/input_$i.fasta
-            fi
-            done
-            for i in {wildcards.pdb}/alignments/redo/*.fasta
-            do
-                n=${{i%.*}}
-                n=${{n##*_}}
-                {config[clustlo_bin]} -i $i -o {wildcards.pdb}/alignments/redo/alignment_redo_$n.clu --outfmt=clustal --resno
-            done
-        fi
-        
+        {config[pdb2fasta_bin]} {input} > {output}
         """
+
+
+
+rule pdb2fasta_redo:
+     input:
+        "{pdb_split}/split_chain/redo/{pdb_spli}_{chain_id}_{uniprot_seq}.pdb"
+     output:
+        "{pdb_split}/split_chain/redo/{pdb_spli}_{chain_id}_{uniprot_seq}.fasta"
+     shell:
+        """
+        {config[pdb2fasta_bin]} {input} > {output}
+        """
+
+rule alignement:
+     input:
+        "{pdb_align}/split_chain/original/{pdb_align}_{chain_id}_{uniprot_seq}.fasta",
+        "{pdb_align}/uniprot_sequences/{uniprot_seq}.fasta"
+     output:
+        "{pdb_align}/alignment/original/{pdb_align}_{chain_id}_{uniprot_seq}.clu"
+     run:
+        if str(wildcards.uniprot_seq) in str(input[1]):
+            shell("cat {wildcards.pdb_align}/split_chain/original/{wildcards.pdb_align}_{wildcards.chain_id}_{wildcards.uniprot_seq}.fasta {wildcards.pdb_align}/uniprot_sequences/{wildcards.uniprot_seq}.fasta > {wildcards.pdb_align}/alignment/original/input_{wildcards.chain_id}_{wildcards.uniprot_seq}.fasta")
+            shell("{config[clustlo_bin]} -i {wildcards.pdb_align}/alignment/original/input_{wildcards.chain_id}_{wildcards.uniprot_seq}.fasta -o {output} --outfmt=clustal --resno")
+
+rule alignement_redo:
+     input:
+        "{pdb_align}/split_chain/redo/{pdb_align}_{chain_id}_{uniprot_seq}.fasta",
+        "{pdb_align}/uniprot_sequences/{uniprot_seq}.fasta"
+     output:
+        "{pdb_align}/alignment/redo/{pdb_align}_{chain_id}_{uniprot_seq}.clu"
+     run:
+        if str(wildcards.uniprot_seq) in str(input[1]):
+            shell("cat {wildcards.pdb_align}/split_chain/redo/{wildcards.pdb_align}_{wildcards.chain_id}_{wildcards.uniprot_seq}.fasta {wildcards.pdb_align}/uniprot_sequences/{wildcards.uniprot_seq}.fasta > {wildcards.pdb_align}/alignment/redo/input_{wildcards.chain_id}_{wildcards.uniprot_seq}.fasta")
+            shell("{config[clustlo_bin]}  -i {wildcards.pdb_align}/alignment/redo/input_{wildcards.chain_id}_{wildcards.uniprot_seq}.fasta -o {output} --outfmt=clustal --resno")
+
+         
 rule pdb4amber:
     input:
-         "{pdb}/{pdb}_original.pdb",
-         expand("{pdb_redo}/{pdb_redo}_pdbredo.pdb", pdb_redo=ID_entry_redo)
+         "{pdb}/{pdb}_original.pdb"
     output:
         "{pdb}/pdb4amber/original/{pdb}_amber_original.pdb"
     shell:
@@ -231,9 +241,17 @@ rule pdb4amber:
         source /usr/local/amber-20/amber.sh
         set -eu
         pdb4amber -i  "{wildcards.pdb}/{wildcards.pdb}_original.pdb" -o {output} -l {wildcards.pdb}/pdb4amber/original/log_file
-        if [[ -f {wildcards.pdb}/{wildcards.pdb}_pdbredo.pdb ]]; then
-            mkdir {wildcards.pdb}/pdb4amber/redo
-            pdb4amber -i {wildcards.pdb}/{wildcards.pdb}_pdbredo.pdb -o {wildcards.pdb}/pdb4amber/redo/{wildcards.pdb}_amber_pdbredo.pdb -l {wildcards.pdb}/pdb4amber/redo/log_file
-        fi
         """
-       
+rule pdb4amber_redo:
+    input:
+         "{pdb_redo}/{pdb_redo}_redo.pdb"
+    output:
+        "{pdb_redo}/pdb4amber/redo/{pdb_redo}_amber_redo.pdb"
+    shell:
+        """
+        set +eu
+        source /usr/local/amber-20/amber.sh
+        set -eu
+        pdb4amber -i  "{wildcards.pdb_redo}/{wildcards.pdb_redo}_redo.pdb" -o {output} -l {wildcards.pdb_redo}/pdb4amber/redo/log_file
+        """
+
